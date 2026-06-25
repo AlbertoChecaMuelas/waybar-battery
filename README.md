@@ -26,29 +26,21 @@ Other OpenRazer-supported wireless devices with battery reporting should work ou
    yay -S openrazer-driver-dkms openrazer-daemon python-openrazer
    ```
 
-2. **Create the `plugdev` group** (needed on Arch — it does not exist by default):
+2. **Add your user to the `openrazer` group:**
 
    ```bash
-   sudo groupadd plugdev
-   ```
-
-3. **Add your user to both required groups** (both are mandatory):
-
-   ```bash
-   sudo gpasswd -a $USER plugdev
    sudo gpasswd -a $USER openrazer
    ```
 
-   - `plugdev` — grants udev device access to the dongle
-   - `openrazer` — the daemon checks membership on startup and refuses to run if the user is absent from this group
+   The daemon checks group membership on startup and refuses to run if the user is not a member.
 
-4. **Reboot** (group membership changes require a new login session):
+3. **Reboot** (group membership changes require a new login session):
 
    ```bash
    sudo reboot
    ```
 
-5. **Deploy the script:**
+4. **Deploy the script:**
 
    ```bash
    mkdir -p ~/.config/waybar/scripts
@@ -56,9 +48,9 @@ Other OpenRazer-supported wireless devices with battery reporting should work ou
    chmod +x ~/.config/waybar/scripts/razer-battery.py
    ```
 
-6. **Wire the Waybar config** — see the snippet below.
+5. **Wire the Waybar config** — see the snippet below.
 
-7. **Reload Waybar:**
+6. **Reload Waybar:**
 
    ```bash
    pkill waybar && waybar &
@@ -112,8 +104,8 @@ Add to your `~/.config/waybar/style.css` for status colours:
 **Empty device list / script outputs `?`**
 
 - Check daemon status: `systemctl --user status openrazer-daemon`
-- Verify group membership: `groups` (must include both `plugdev` and `openrazer`)
-- If groups are missing, re-run step 3 and reboot
+- Verify group membership: `groups` (must include `openrazer`)
+- If groups are missing, re-run step 2 and reboot
 
 **Daemon fails to start**
 
