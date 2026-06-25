@@ -1,0 +1,3 @@
+.plans/
+*.pyc
+__pycache__/
