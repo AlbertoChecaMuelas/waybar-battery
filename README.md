@@ -99,7 +99,7 @@ Add to your `~/.config/waybar/style.css` for status colours:
 
 - Check daemon status: `systemctl --user status openrazer-daemon`
 - Verify group membership: `groups` (must include `openrazer`)
-- If groups are missing, re-run step 2 and reboot
+- If groups are missing, re-run `./install.sh` (or `sudo gpasswd -a $USER openrazer`) and reboot
 
 **Daemon fails to start**
 

@@ -30,7 +30,8 @@ for pkg in openrazer-driver-dkms openrazer-daemon python-openrazer; do
         echo "Package already installed: $pkg"
     elif [[ -n "$HELPER" ]]; then
         echo "Installing $pkg via $HELPER..."
-        "$HELPER" -S --needed --noconfirm "$pkg"
+        "$HELPER" -S --needed --noconfirm "$pkg" \
+            || { echo "Warning: failed to install $pkg; continuing." >&2; }
     else
         MISSING_PKGS+=("$pkg")
     fi
