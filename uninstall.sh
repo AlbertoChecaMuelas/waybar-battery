@@ -40,8 +40,14 @@ rmdir --ignore-fail-on-non-empty "$HOME/.config/waybar/scripts" 2>/dev/null || t
 # ---------------------------------------------------------------------------
 STYLE="$HOME/.config/waybar/style.css"
 if [[ -f "$STYLE" ]] && grep -qF '/* >>> waybar-battery >>> */' "$STYLE"; then
-    sed -i '/>>> waybar-battery >>>/,/<<< waybar-battery <<</d' "$STYLE"
-    echo "Removed waybar-battery CSS block from $STYLE."
+    if grep -qF '/* <<< waybar-battery <<< */' "$STYLE"; then
+        sed -i '/>>> waybar-battery >>>/,/<<< waybar-battery <<</d' "$STYLE"
+        echo "Removed waybar-battery CSS block from $STYLE."
+    else
+        echo "Warning: opening sentinel found but closing sentinel is missing in $STYLE." >&2
+        echo "  Skipping automatic removal to avoid deleting unrelated CSS." >&2
+        echo "  Please remove the waybar-battery block manually." >&2
+    fi
 else
     echo "No waybar-battery CSS block found in $STYLE, skipping."
 fi
