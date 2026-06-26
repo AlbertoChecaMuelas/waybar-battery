@@ -8,7 +8,7 @@ Waybar scripts to show peripheral battery levels on Hyprland/Omarchy (CachyOS/Ar
 |---|---|---|
 | Razer Naga V2 Pro (Wireless) | Confirmed working | OpenRazer D-Bus |
 | Other OpenRazer wireless mice with battery reporting | Should work | OpenRazer D-Bus |
-| Keychron (via Keychron Link dongle, 3434:d030) | Not feasible | See Compatibility notes |
+| Keychron (via Keychron Link dongle, 3434:d030) | Not feasible | No channel available via 2.4 GHz dongle — see Compatibility notes |
 
 Other OpenRazer-supported wireless devices with battery reporting should work out of the box. Check the OpenRazer project for the full supported device list.
 
@@ -120,7 +120,26 @@ Add to your `~/.config/waybar/style.css` for status colours:
 
 ### Keychron Link dongle (3434:d030) — not feasible
 
-The Keychron Link USB dongle is visible via `lsusb` but does not advertise standard HID battery usage pages. Neither `/sys/class/power_supply/`, upower, nor BlueZ enumerates it as a battery-capable device. Reading the battery level would require reverse-engineering a proprietary 32-byte raw HID protocol (Usage Page `0xFF60`), for which no public documentation exists. This path was investigated and abandoned.
+The Keychron Link dongle (USB `3434:d030`) enumerates as four hidraw nodes:
+
+- **hidraw0** — standard mouse HID
+- **hidraw1** — Keychron proprietary protocol (Usage Page `0x8C`), with Report IDs `0xB1` (IN, 32 bytes), `0xB2` (OUT, 32 bytes), and `0x51`/`0x52`/`0x53`/`0x54` (FEATURE)
+- **hidraw2** — standard QMK keyboard HID (carries keystrokes)
+- **hidraw3** — QMK Raw HID interface (Usage Page `0xFF60`, Usage `0x61`), 32-byte reports, no Report ID
+
+Both the QMK Raw HID interface (`hidraw3`) and the proprietary `0x8C` interface (`hidraw1`) accept writes from the host over USB, but the dongle does **not** retransmit those channels wirelessly to the keyboard. All reads timed out regardless of framing or command tried: 103 distinct command bytes were sent across three different framings with zero responses. During active keyboard use — confirmed by 255 HID reports on `hidraw2` — no reports appeared on `hidraw1` or `hidraw3`.
+
+**Conclusion:** the dongle only retransmits standard HID keyboard and mouse reports wirelessly. Battery readout via the 2.4 GHz dongle is not possible through any known interface.
+
+**Alternatives investigated and ruled out:**
+
+- `upower`, `/sys/class/power_supply`, BlueZ: not viable — the dongle does not enumerate as a battery-capable device
+- QMK Raw HID via USB cable: would only work when the keyboard is physically connected via USB, not in wireless mode
+
+**Potential untested paths:**
+
+- BLE GATT characteristic `0x2A19` (Battery Level): not tested because Bluetooth was occupied by another device at the time of investigation; may be viable if the keyboard pairs over BLE
+- QMK Raw HID over USB cable (wired mode): functional for wired use, but not applicable in wireless mode
 
 ### Why not upower / BlueZ for the Razer mouse?
 
