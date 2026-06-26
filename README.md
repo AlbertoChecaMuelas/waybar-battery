@@ -31,7 +31,17 @@ Run the installer from the repository root:
 - Installs `openrazer-driver-dkms`, `openrazer-daemon`, and `python-openrazer` via `yay` or `paru` (skipped if already installed; a warning is printed if no AUR helper is found).
 - Adds your user to the `openrazer` group (if not already a member) and enables the `openrazer-daemon` systemd user service.
 - Deploys `razer-battery.py` to `~/.config/waybar/scripts/`.
-- Appends the CSS block to `~/.config/waybar/style.css` (idempotent — skipped if already present).
+- Appends a **placeholder block** between sentinel markers to `~/.config/waybar/style.css` (idempotent — skipped if already present). The placeholder looks like:
+
+  ```css
+  /* >>> waybar-battery >>> */
+  #custom-mouse-battery {
+      /* style as needed */
+  }
+  /* <<< waybar-battery <<< */
+  ```
+
+  Paste the coloured styling rules inside that block manually (see [Waybar config snippet](#waybar-config-snippet)).
 - **Prints** the `custom/mouse-battery` module snippet for you to paste into `config.jsonc` manually (the script does not auto-edit that file).
 - Reloads Waybar if it is running (skipped when a re-login is required first).
 
@@ -72,7 +82,7 @@ Then include `"custom/mouse-battery"` in your `modules-right` array:
 ]
 ```
 
-Add to your `~/.config/waybar/style.css` for status colours:
+Paste the following rules **inside** the placeholder block that `install.sh` added to `~/.config/waybar/style.css` (replace the `/* style as needed */` comment):
 
 ```css
 #custom-mouse-battery {
@@ -110,6 +120,10 @@ Add to your `~/.config/waybar/style.css` for status colours:
 
 - Your Waybar font must be a Nerd Fonts patched font. Set it in `~/.config/waybar/config.jsonc` under `"font"` or in your GTK theme.
 
+**No AUR helper found (`yay` / `paru` not installed)**
+
+- If neither `yay` nor `paru` is detected, `install.sh` prints a warning listing the three required packages (`openrazer-driver-dkms`, `openrazer-daemon`, `python-openrazer`) and continues without installing them. Install those packages manually before the mouse battery indicator will work.
+
 ## Compatibility notes
 
 ### Keychron Link dongle (3434:d030) — not feasible
@@ -138,3 +152,26 @@ Both the QMK Raw HID interface (`hidraw3`) and the proprietary `0x8C` interface 
 ### Why not upower / BlueZ for the Razer mouse?
 
 The Naga V2 Pro uses a 2.4 GHz USB dongle, not Bluetooth. upower and BlueZ do not expose wireless-dongle battery levels for Razer hardware. OpenRazer is the only supported path.
+
+## Development / Testing
+
+The install/uninstall logic is covered by `tests/install.bats`.
+
+**Prerequisite:** `bats-core >= 1.5` — install via:
+
+```bash
+sudo pacman -S bash-automated-testing-system
+```
+
+**Run the suite:**
+
+```bash
+bats tests/install.bats
+```
+
+**What it covers:**
+
+- CSS block append idempotency (running `install.sh` twice does not duplicate the placeholder)
+- CSS strip — happy path (sentinel markers present and removed cleanly by `uninstall.sh`)
+- CSS strip — missing-close-sentinel guard (graceful behaviour when the closing sentinel is absent)
+- `--purge` flag parsing
