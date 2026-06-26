@@ -20,41 +20,35 @@ Other OpenRazer-supported wireless devices with battery reporting should work ou
 
 ## Installation
 
-1. **Install required packages:**
+Run the installer from the repository root:
 
-   ```bash
-   yay -S openrazer-driver-dkms openrazer-daemon python-openrazer
-   ```
+```bash
+./install.sh
+```
 
-2. **Add your user to the `openrazer` group:**
+**What `install.sh` does:**
 
-   ```bash
-   sudo gpasswd -a $USER openrazer
-   ```
+- Installs `openrazer-driver-dkms`, `openrazer-daemon`, and `python-openrazer` via `yay` or `paru` (skipped if already installed; a warning is printed if no AUR helper is found).
+- Adds your user to the `openrazer` group (if not already a member) and enables the `openrazer-daemon` systemd user service.
+- Deploys `razer-battery.py` to `~/.config/waybar/scripts/`.
+- Appends the CSS block to `~/.config/waybar/style.css` (idempotent — skipped if already present).
+- **Prints** the `custom/mouse-battery` module snippet for you to paste into `config.jsonc` manually (the script does not auto-edit that file).
+- Reloads Waybar if it is running (skipped when a re-login is required first).
 
-   The daemon checks group membership on startup and refuses to run if the user is not a member.
+**Manual step required after running `install.sh`:**
 
-3. **Reboot** (group membership changes require a new login session):
+Paste the `custom/mouse-battery` snippet printed by the script into your `~/.config/waybar/config.jsonc` and add `"custom/mouse-battery"` to your `modules-right` array. See the [Waybar config snippet](#waybar-config-snippet) section below for the full block.
 
-   ```bash
-   sudo reboot
-   ```
+If you were newly added to the `openrazer` group, a **reboot or re-login** is required before the daemon and script will work correctly.
 
-4. **Deploy the script:**
+### Uninstalling
 
-   ```bash
-   mkdir -p ~/.config/waybar/scripts
-   cp razer-battery.py ~/.config/waybar/scripts/razer-battery.py
-   chmod +x ~/.config/waybar/scripts/razer-battery.py
-   ```
+```bash
+./uninstall.sh           # removes the deployed script and CSS block
+./uninstall.sh --purge   # also disables the daemon, removes group membership, and uninstalls the packages
+```
 
-5. **Wire the Waybar config** — see the snippet below.
-
-6. **Reload Waybar:**
-
-   ```bash
-   pkill waybar && waybar &
-   ```
+`uninstall.sh` does **not** auto-edit `config.jsonc`; remove the `custom/mouse-battery` block from that file manually.
 
 ## Waybar config snippet
 
