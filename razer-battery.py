@@ -31,8 +31,8 @@ def get_battery_info():
         else:
             css_class = "normal"
 
-        # U+F5DF  nerd-font mouse icon; falls back gracefully in any font
-        text = f" {level}%"
+        # U+F037D 󰍽 nf-md-mouse; renders correctly with Nerd Fonts (Omarchy/Waybar)
+        text = f"󰍽 {level}%"
 
         return {"text": text, "tooltip": tooltip, "class": css_class}
 
