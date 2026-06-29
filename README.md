@@ -155,23 +155,29 @@ The Naga V2 Pro uses a 2.4 GHz USB dongle, not Bluetooth. upower and BlueZ do no
 
 ## Development / Testing
 
-The install/uninstall logic is covered by `tests/install.bats`.
+Two test suites cover the project:
 
-**Prerequisite:** `bats-core >= 1.5` — install via:
+- `tests/install.bats` — install.sh / uninstall.sh wiring (CSS idempotency, sentinel handling, OpenRazer notifier flip, `--purge` flag parsing).
+- `tests/test_razer_battery.py` — notification logic in `razer-battery.py` (threshold, charging reset, deduplication, state persistence).
+
+**Prerequisites:**
 
 ```bash
-sudo pacman -S bash-automated-testing-system
+sudo pacman -S bash-automated-testing-system python-pytest
 ```
 
 **Run the suite:**
 
 ```bash
 bats tests/install.bats
+python3 -m pytest tests/test_razer_battery.py
 ```
 
-**What it covers:**
+**What they cover:**
 
 - CSS block append idempotency (running `install.sh` twice does not duplicate the placeholder)
 - CSS strip — happy path (sentinel markers present and removed cleanly by `uninstall.sh`)
 - CSS strip — missing-close-sentinel guard (graceful behaviour when the closing sentinel is absent)
 - `--purge` flag parsing
+- install.sh step 4: forces `battery_notifier = False` in `~/.config/openrazer/razer.conf` (key present, key absent, no `razer.conf`, idempotent across reruns)
+- `_maybe_notify()`: above-threshold suppression, charging reset, first-time-below notification, deduplication on equal or higher levels, re-notify on drops, threshold boundary at 10%
