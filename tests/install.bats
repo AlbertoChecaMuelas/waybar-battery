@@ -7,6 +7,7 @@
 #   2. CSS strip happy path        — block is removed; surrounding CSS survives
 #   3. CSS strip missing-close guard — file untouched + warning printed when close sentinel absent
 #   4. Flag parsing                — --purge exits 0; unknown flag exits 1
+#   5. OpenRazer notifier flip     — step 4 forces battery_notifier = False, idempotent, safe on missing config
 
 REPO_ROOT="/home/espinilleitor/repos/own/waybar-battery"
 
@@ -133,4 +134,57 @@ teardown() {
 
     run bash "$REPO_ROOT/uninstall.sh" --foo
     [ "$status" -eq 1 ]
+}
+
+# ---------------------------------------------------------------------------
+# 5. install.sh step 4 — OpenRazer battery_notifier management
+# ---------------------------------------------------------------------------
+
+@test "install.sh step 4: sets battery_notifier = False when key exists with True" {
+    mkdir -p "$HOME/.config/openrazer"
+    printf '%s\n' \
+        '[Startup]' \
+        'battery_notifier = True' \
+        > "$HOME/.config/openrazer/razer.conf"
+
+    run bash "$REPO_ROOT/install.sh"
+    [ "$status" -eq 0 ]
+
+    run grep -E '^[[:space:]]*battery_notifier[[:space:]]*=' "$HOME/.config/openrazer/razer.conf"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"battery_notifier = False"* ]]
+}
+
+@test "install.sh step 4: appends battery_notifier = False when key missing" {
+    mkdir -p "$HOME/.config/openrazer"
+    printf '%s\n' \
+        '[Startup]' \
+        'sync_effects_enabled = True' \
+        > "$HOME/.config/openrazer/razer.conf"
+
+    run bash "$REPO_ROOT/install.sh"
+    [ "$status" -eq 0 ]
+
+    run grep -E '^[[:space:]]*battery_notifier[[:space:]]*=' "$HOME/.config/openrazer/razer.conf"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"battery_notifier = False"* ]]
+}
+
+@test "install.sh step 4: skips cleanly when razer.conf does not exist" {
+    run bash "$REPO_ROOT/install.sh"
+    [ "$status" -eq 0 ]
+    [ ! -e "$HOME/.config/openrazer/razer.conf" ]
+}
+
+@test "install.sh step 4: idempotent — running twice does not duplicate the line" {
+    mkdir -p "$HOME/.config/openrazer"
+    printf '%s\n' '[Startup]' 'battery_notifier = True' > "$HOME/.config/openrazer/razer.conf"
+
+    run bash "$REPO_ROOT/install.sh"
+    [ "$status" -eq 0 ]
+    run bash "$REPO_ROOT/install.sh"
+    [ "$status" -eq 0 ]
+
+    count=$(grep -cE '^[[:space:]]*battery_notifier[[:space:]]*=' "$HOME/.config/openrazer/razer.conf")
+    [ "$count" -eq 1 ]
 }
