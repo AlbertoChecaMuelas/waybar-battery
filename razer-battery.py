@@ -2,7 +2,67 @@
 """Waybar exec script: query Razer Naga V2 Pro battery via OpenRazer D-Bus."""
 
 import json
+import os
+import subprocess
 import sys
+
+
+NOTIFY_THRESHOLD = 10
+STATE_FILE = os.path.join(
+    os.environ.get("XDG_RUNTIME_DIR", "/run/user/{uid}".format(uid=os.getuid())),
+    "razer-battery-state",
+)
+
+
+def _read_last_level():
+    try:
+        with open(STATE_FILE, "r", encoding="utf-8") as fh:
+            return int(fh.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _write_last_level(level):
+    try:
+        os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+        tmp = STATE_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(str(level))
+        os.replace(tmp, STATE_FILE)
+    except OSError:
+        pass
+
+
+def _clear_state():
+    try:
+        os.unlink(STATE_FILE)
+    except OSError:
+        pass
+
+
+def _maybe_notify(name, level, charging):
+    if charging or level > NOTIFY_THRESHOLD:
+        _clear_state()
+        return
+    last = _read_last_level()
+    if last is not None and level >= last:
+        return
+    subprocess.Popen(
+        [
+            "notify-send",
+            "-u",
+            "critical",
+            "-i",
+            "battery-caution",
+            "-t",
+            "10000",
+            f"{name}: {level}%",
+            f"Batería baja ({level}%)",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    _write_last_level(level)
 
 
 def get_battery_info():
@@ -10,7 +70,7 @@ def get_battery_info():
         from openrazer.client import DeviceManager
 
         dm = DeviceManager()
-    except Exception as exc:  # daemon not running, library absent, etc.
+    except Exception as exc:
         return {"text": "", "tooltip": f"Mouse not connected ({exc})", "class": "disconnected"}
 
     for device in dm.devices:
@@ -19,9 +79,10 @@ def get_battery_info():
 
         name = device.name
         level = device.battery_level
+        charging = device.has("charging") and device.is_charging
 
         tooltip = f"{name}: {level}%"
-        if device.has("charging") and device.is_charging:
+        if charging:
             tooltip += " (charging)"
 
         if level <= 10:
@@ -31,12 +92,12 @@ def get_battery_info():
         else:
             css_class = "normal"
 
-        # U+F037D 󰍽 nf-md-mouse; renders correctly with Nerd Fonts (Omarchy/Waybar)
         text = f"󰍽 {level}%"
+
+        _maybe_notify(name, level, charging)
 
         return {"text": text, "tooltip": tooltip, "class": css_class}
 
-    # No battery-capable device found
     return {"text": "", "tooltip": "Mouse not connected", "class": "disconnected"}
 
 
