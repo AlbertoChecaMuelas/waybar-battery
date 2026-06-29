@@ -1,0 +1,135 @@
+"""Tests for the notification logic in razer-battery.py.
+
+Covers _maybe_notify() and the state-file helpers used to deduplicate
+notifications while the mouse drains below 10%.
+"""
+
+import importlib.util
+import subprocess
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SCRIPT = REPO_ROOT / "razer-battery.py"
+
+
+def _load_module(xdg_runtime_dir):
+    spec = importlib.util.spec_from_file_location("_razer_battery_under_test", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def pytest_collection_modifyitems(config, items):
+    pass
+
+
+import pytest
+
+
+@pytest.fixture
+def tmp_state_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    return tmp_path
+
+
+@pytest.fixture
+def razer(tmp_state_dir):
+    return _load_module(tmp_state_dir)
+
+
+@pytest.fixture
+def notify(monkeypatch):
+    calls = []
+
+    def fake_popen(args, *a, **kw):
+        calls.append(args)
+
+        class _Proc:
+            def wait(self):
+                return 0
+
+        return _Proc()
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+    return calls
+
+
+@pytest.fixture
+def state_path(razer):
+    return Path(razer.STATE_FILE)
+
+
+def test_above_threshold_does_not_notify_and_clears_state(razer, notify, state_path):
+    state_path.write_text("5")
+
+    razer._maybe_notify("Mouse", 50, charging=False)
+
+    assert notify == []
+    assert not state_path.exists()
+
+
+def test_charging_does_not_notify_and_clears_state(razer, notify, state_path):
+    state_path.write_text("5")
+
+    razer._maybe_notify("Mouse", 5, charging=True)
+
+    assert notify == []
+    assert not state_path.exists()
+
+
+def test_first_time_below_threshold_notifies_and_persists(razer, notify, state_path):
+    razer._maybe_notify("Mouse", 8, charging=False)
+
+    assert len(notify) == 1
+    cmd = notify[0]
+    assert cmd[0] == "notify-send"
+    assert "-u" in cmd
+    assert "critical" in cmd
+    assert "Mouse: 8%" in cmd
+    assert "Batería baja (8%)" in cmd
+    assert state_path.read_text() == "8"
+
+
+def test_same_level_does_not_re_notify(razer, notify, state_path):
+    state_path.write_text("7")
+
+    razer._maybe_notify("Mouse", 7, charging=False)
+
+    assert notify == []
+    assert state_path.read_text() == "7"
+
+
+def test_higher_level_still_below_threshold_does_not_re_notify(razer, notify, state_path):
+    state_path.write_text("5")
+
+    razer._maybe_notify("Mouse", 7, charging=False)
+
+    assert notify == []
+    assert state_path.read_text() == "5"
+
+
+def test_lower_level_re_notifies_and_updates_state(razer, notify, state_path):
+    state_path.write_text("7")
+
+    razer._maybe_notify("Mouse", 5, charging=False)
+
+    assert len(notify) == 1
+    assert state_path.read_text() == "5"
+
+
+def test_threshold_is_inclusive_at_10(razer, notify, state_path):
+    razer._maybe_notify("Mouse", 10, charging=False)
+
+    assert len(notify) == 1
+    assert state_path.read_text() == "10"
+
+
+def test_level_11_does_not_notify(razer, notify, state_path):
+    razer._maybe_notify("Mouse", 11, charging=False)
+
+    assert notify == []
+
+
+def test_clear_missing_state_does_not_raise(razer):
+    razer._clear_state()
