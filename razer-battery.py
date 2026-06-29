@@ -41,6 +41,8 @@ def _clear_state():
 
 
 def _maybe_notify(name, level, charging):
+    if level <= 0:
+        return
     if charging or level > NOTIFY_THRESHOLD:
         _clear_state()
         return

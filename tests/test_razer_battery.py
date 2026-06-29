@@ -133,3 +133,26 @@ def test_level_11_does_not_notify(razer, notify, state_path):
 
 def test_clear_missing_state_does_not_raise(razer):
     razer._clear_state()
+
+
+def test_level_zero_does_not_notify(razer, notify, state_path):
+    razer._maybe_notify("Mouse", 0, charging=False)
+
+    assert notify == []
+    assert not state_path.exists()
+
+
+def test_level_zero_does_not_clobber_existing_state(razer, notify, state_path):
+    state_path.write_text("7")
+
+    razer._maybe_notify("Mouse", 0, charging=False)
+
+    assert notify == []
+    assert state_path.read_text() == "7"
+
+
+def test_level_negative_does_not_notify(razer, notify, state_path):
+    razer._maybe_notify("Mouse", -1, charging=False)
+
+    assert notify == []
+    assert not state_path.exists()
