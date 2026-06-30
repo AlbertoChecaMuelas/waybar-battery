@@ -89,17 +89,57 @@ STYLE="$HOME/.config/waybar/style.css"
 mkdir -p "$(dirname "$STYLE")"
 touch "$STYLE"
 
-if ! grep -qF '/* >>> waybar-battery >>> */' "$STYLE"; then
-    cat >> "$STYLE" <<'CSSBLOCK'
+NEW_CSS_BLOCK=$(cat <<'CSSBLOCK'
 /* >>> waybar-battery >>> */
 #custom-mouse-battery {
-    /* style as needed */
+    padding: 0 8px;
+}
+
+#custom-mouse-battery.warning {
+    color: #e5a50a;
+}
+
+#custom-mouse-battery.critical {
+    color: #e53935;
+    animation: blink 1s linear infinite;
+}
+
+#custom-mouse-battery.charging {
+    color: #43a047;
+}
+
+#custom-mouse-battery.disconnected {
+    opacity: 0.4;
 }
 /* <<< waybar-battery <<< */
 CSSBLOCK
+)
+
+if ! grep -qF '/* >>> waybar-battery >>> */' "$STYLE"; then
+    printf '\n%s\n' "$NEW_CSS_BLOCK" >> "$STYLE"
     echo "CSS block appended to $STYLE"
+elif grep -q '#custom-mouse-battery.charging' "$STYLE"; then
+    echo "CSS .charging rule already present in $STYLE, skipping."
 else
-    echo "CSS block already present in $STYLE, skipping."
+    BLOCK_FILE="$(mktemp)"
+    printf '%s' "$NEW_CSS_BLOCK" > "$BLOCK_FILE"
+    python3 - "$STYLE" "$BLOCK_FILE" <<'PYTHON'
+import re, sys
+style_file, block_file = sys.argv[1], sys.argv[2]
+with open(style_file) as f:
+    content = f.read()
+with open(block_file) as f:
+    new_block = f.read().rstrip("\n")
+pattern = re.compile(
+    r'/\* >>> waybar-battery >>> \*/.*?/\* <<< waybar-battery <<< \*/',
+    re.DOTALL,
+)
+content = pattern.sub(new_block, content)
+with open(style_file, 'w') as f:
+    f.write(content)
+PYTHON
+    rm -f "$BLOCK_FILE"
+    echo "Updated placeholder CSS block in $STYLE"
 fi
 
 # ---------------------------------------------------------------------------

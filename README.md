@@ -31,17 +31,7 @@ Run the installer from the repository root:
 - Installs `openrazer-driver-dkms`, `openrazer-daemon`, and `python-openrazer` via `yay` or `paru` (skipped if already installed; a warning is printed if no AUR helper is found).
 - Adds your user to the `openrazer` group (if not already a member) and enables the `openrazer-daemon` systemd user service.
 - Deploys `razer-battery.py` to `~/.config/waybar/scripts/`.
-- Appends a **placeholder block** between sentinel markers to `~/.config/waybar/style.css` (idempotent — skipped if already present). The placeholder looks like:
-
-  ```css
-  /* >>> waybar-battery >>> */
-  #custom-mouse-battery {
-      /* style as needed */
-  }
-  /* <<< waybar-battery <<< */
-  ```
-
-  Paste the coloured styling rules inside that block manually (see [Waybar config snippet](#waybar-config-snippet)).
+- Appends a **fully styled CSS block** between sentinel markers to `~/.config/waybar/style.css` (idempotent; upgrades the older placeholder version on rerun; leaves your customisations untouched if the `.charging` rule is already present). The block contains the rules for `warning`, `critical`, `charging`, and `disconnected` states — see [Waybar config snippet](#waybar-config-snippet) for the exact contents.
 - **Prints** the `custom/mouse-battery` module snippet for you to paste into `config.jsonc` manually (the script does not auto-edit that file).
 - Reloads Waybar if it is running (skipped when a re-login is required first).
 
@@ -82,9 +72,10 @@ Then include `"custom/mouse-battery"` in your `modules-right` array:
 ]
 ```
 
-Paste the following rules **inside** the placeholder block that `install.sh` added to `~/.config/waybar/style.css` (replace the `/* style as needed */` comment):
+`install.sh` writes the styled block below to `~/.config/waybar/style.css` automatically (between sentinel markers, idempotent, upgrades an older placeholder version on rerun). The canonical contents are:
 
 ```css
+/* >>> waybar-battery >>> */
 #custom-mouse-battery {
     padding: 0 8px;
 }
@@ -98,10 +89,17 @@ Paste the following rules **inside** the placeholder block that `install.sh` add
     animation: blink 1s linear infinite;
 }
 
+#custom-mouse-battery.charging {
+    color: #43a047; /* green while charging (overrides warning/critical) */
+}
+
 #custom-mouse-battery.disconnected {
     opacity: 0.4;
 }
+/* <<< waybar-battery <<< */
 ```
+
+Edit the rules inside the sentinels to taste. Re-run `./install.sh` to restore the canonical version.
 
 ## Troubleshooting
 

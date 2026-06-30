@@ -8,6 +8,7 @@
 #   3. CSS strip missing-close guard — file untouched + warning printed when close sentinel absent
 #   4. Flag parsing                — --purge exits 0; unknown flag exits 1
 #   5. OpenRazer notifier flip     — step 4 forces battery_notifier = False, idempotent, safe on missing config
+#   6. CSS auto-install            — step 6 appends/upgrades the styled block; idempotent across reruns and presets
 
 REPO_ROOT="/home/espinilleitor/repos/own/waybar-battery"
 
@@ -134,6 +135,81 @@ teardown() {
 
     run bash "$REPO_ROOT/uninstall.sh" --foo
     [ "$status" -eq 1 ]
+}
+
+# ---------------------------------------------------------------------------
+# 6. install.sh step 6 — CSS auto-install behaviour
+# ---------------------------------------------------------------------------
+
+@test "install.sh adds a fully styled CSS block on a fresh style.css" {
+    run bash "$REPO_ROOT/install.sh"
+    [ "$status" -eq 0 ]
+
+    STYLE="$HOME/.config/waybar/style.css"
+    [ -f "$STYLE" ]
+
+    run grep -F '#custom-mouse-battery.charging' "$STYLE"
+    [ "$status" -eq 0 ]
+
+    run grep -F '#custom-mouse-battery.warning' "$STYLE"
+    [ "$status" -eq 0 ]
+
+    run grep -F '#custom-mouse-battery.critical' "$STYLE"
+    [ "$status" -eq 0 ]
+
+    run grep -F '#custom-mouse-battery.disconnected' "$STYLE"
+    [ "$status" -eq 0 ]
+}
+
+@test "install.sh upgrades an existing placeholder CSS block with full rules" {
+    STYLE="$HOME/.config/waybar/style.css"
+    mkdir -p "$(dirname "$STYLE")"
+    printf '%s\n' \
+        'body { color: red; }' \
+        '/* >>> waybar-battery >>> */' \
+        '#custom-mouse-battery {' \
+        '    /* style as needed */' \
+        '}' \
+        '/* <<< waybar-battery <<< */' \
+        '.footer { display: flex; }' \
+        > "$STYLE"
+
+    run bash "$REPO_ROOT/install.sh"
+    [ "$status" -eq 0 ]
+
+    run grep -F '#custom-mouse-battery.charging' "$STYLE"
+    [ "$status" -eq 0 ]
+
+    run grep -F '/* style as needed */' "$STYLE"
+    [ "$status" -ne 0 ]
+
+    # Exactly one sentinel pair after upgrade.
+    count="$(grep -c '>>> waybar-battery >>>' "$STYLE")"
+    [ "$count" -eq 1 ]
+
+    # Surrounding CSS preserved.
+    run grep -F 'body { color: red; }' "$STYLE"
+    [ "$status" -eq 0 ]
+    run grep -F '.footer { display: flex; }' "$STYLE"
+    [ "$status" -eq 0 ]
+}
+
+@test "install.sh leaves an already-styled CSS block untouched" {
+    STYLE="$HOME/.config/waybar/style.css"
+    mkdir -p "$(dirname "$STYLE")"
+    printf '%s\n' \
+        '/* >>> waybar-battery >>> */' \
+        '#custom-mouse-battery.charging { color: #abcdef; }' \
+        '/* <<< waybar-battery <<< */' \
+        > "$STYLE"
+
+    BEFORE_HASH="$(sha256sum "$STYLE" | awk '{print $1}')"
+
+    run bash "$REPO_ROOT/install.sh"
+    [ "$status" -eq 0 ]
+
+    AFTER_HASH="$(sha256sum "$STYLE" | awk '{print $1}')"
+    [ "$BEFORE_HASH" = "$AFTER_HASH" ]
 }
 
 # ---------------------------------------------------------------------------
