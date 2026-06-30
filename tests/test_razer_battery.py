@@ -5,6 +5,7 @@ notifications while the mouse drains below 10%.
 """
 
 import importlib.util
+import json
 import subprocess
 from pathlib import Path
 
@@ -58,6 +59,11 @@ def notify(monkeypatch):
 @pytest.fixture
 def state_path(razer):
     return Path(razer.STATE_FILE)
+
+
+@pytest.fixture
+def prev_level_path(razer):
+    return Path(razer.PREV_LEVEL_FILE)
 
 
 def test_above_threshold_does_not_notify_and_clears_state(razer, notify, state_path):
@@ -156,3 +162,79 @@ def test_level_negative_does_not_notify(razer, notify, state_path):
 
     assert notify == []
     assert not state_path.exists()
+
+
+def test_detect_charging_first_run_returns_false_and_persists(razer, prev_level_path):
+    assert razer._detect_charging(50) is False
+    state = json.loads(prev_level_path.read_text())
+    assert state["prev"] == 50
+
+
+def test_detect_charging_level_unchanged_returns_false(razer, prev_level_path):
+    razer._detect_charging(50)
+    assert razer._detect_charging(50) is False
+    state = json.loads(prev_level_path.read_text())
+    assert state["prev"] == 50
+
+
+def test_detect_charging_level_drop_returns_false(razer, prev_level_path):
+    razer._detect_charging(50)
+    assert razer._detect_charging(45) is False
+    state = json.loads(prev_level_path.read_text())
+    assert state["prev"] == 45
+    assert state["last_rise"] == 0
+
+
+def test_detect_charging_level_rise_returns_true(razer, prev_level_path):
+    razer._detect_charging(50)
+    assert razer._detect_charging(55) is True
+    state = json.loads(prev_level_path.read_text())
+    assert state["prev"] == 55
+    assert state["last_rise"] > 0
+
+
+def test_detect_charging_missing_state_file_returns_false(tmp_state_dir, razer, prev_level_path):
+    assert not prev_level_path.exists()
+    assert razer._detect_charging(50) is False
+    state = json.loads(prev_level_path.read_text())
+    assert state["prev"] == 50
+
+
+def test_detect_charging_corrupt_state_file_returns_false(tmp_state_dir, razer, prev_level_path):
+    prev_level_path.write_text("not-json")
+    assert razer._detect_charging(50) is False
+    state = json.loads(prev_level_path.read_text())
+    assert state["prev"] == 50
+
+
+def test_detect_charging_legacy_plain_int_state_file(tmp_state_dir, razer, prev_level_path):
+    prev_level_path.write_text("40")
+    assert razer._detect_charging(45) is True
+    state = json.loads(prev_level_path.read_text())
+    assert state["prev"] == 45
+
+
+def test_detect_charging_grace_period_keeps_true_on_flat(razer, prev_level_path):
+    razer._detect_charging(50)
+    assert razer._detect_charging(55) is True
+    assert razer._detect_charging(55) is True
+
+
+def test_detect_charging_grace_period_expires(razer, prev_level_path, monkeypatch):
+    base = 1_700_000_000.0
+    monkeypatch.setattr(razer.time, "time", lambda: base)
+    razer._detect_charging(50)
+    monkeypatch.setattr(razer.time, "time", lambda: base + 10)
+    assert razer._detect_charging(55) is True
+    monkeypatch.setattr(razer.time, "time", lambda: base + razer.CHARGING_GRACE_SECONDS + 20)
+    assert razer._detect_charging(55) is False
+
+
+def test_detect_charging_drop_resets_grace_immediately(razer, prev_level_path, monkeypatch):
+    base = 1_700_000_000.0
+    monkeypatch.setattr(razer.time, "time", lambda: base)
+    razer._detect_charging(50)
+    monkeypatch.setattr(razer.time, "time", lambda: base + 10)
+    assert razer._detect_charging(55) is True
+    monkeypatch.setattr(razer.time, "time", lambda: base + 20)
+    assert razer._detect_charging(50) is False
