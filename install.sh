@@ -61,7 +61,21 @@ systemctl --user enable --now openrazer-daemon \
     || echo "Warning: could not start openrazer-daemon yet (expected before relogin)." >&2
 
 # ---------------------------------------------------------------------------
-# 4. Deploy script
+# 4. Disable OpenRazer's native battery notifier (the script owns notifications)
+# ---------------------------------------------------------------------------
+OPENRAZER_CONF="$HOME/.config/openrazer/razer.conf"
+if [[ -f "$OPENRAZER_CONF" ]]; then
+    if grep -qE '^[[:space:]]*battery_notifier[[:space:]]*=' "$OPENRAZER_CONF"; then
+        sed -i 's/^[[:space:]]*battery_notifier[[:space:]]*=.*/battery_notifier = False/' "$OPENRAZER_CONF"
+        echo "Disabled OpenRazer native battery notifier in $OPENRAZER_CONF"
+    else
+        printf '\nbattery_notifier = False\n' >> "$OPENRAZER_CONF"
+        echo "Appended battery_notifier = False to $OPENRAZER_CONF"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 5. Deploy script
 # ---------------------------------------------------------------------------
 echo "Deploying razer-battery.py..."
 mkdir -p "$HOME/.config/waybar/scripts"
@@ -69,27 +83,67 @@ install -m 0755 "$SCRIPT_DIR/razer-battery.py" "$HOME/.config/waybar/scripts/raz
 echo "Deployed: $HOME/.config/waybar/scripts/razer-battery.py"
 
 # ---------------------------------------------------------------------------
-# 5. CSS wiring
+# 6. CSS wiring
 # ---------------------------------------------------------------------------
 STYLE="$HOME/.config/waybar/style.css"
 mkdir -p "$(dirname "$STYLE")"
 touch "$STYLE"
 
-if ! grep -qF '/* >>> waybar-battery >>> */' "$STYLE"; then
-    cat >> "$STYLE" <<'CSSBLOCK'
+NEW_CSS_BLOCK=$(cat <<'CSSBLOCK'
 /* >>> waybar-battery >>> */
 #custom-mouse-battery {
-    /* style as needed */
+    padding: 0 8px;
+}
+
+#custom-mouse-battery.warning {
+    color: #e5a50a;
+}
+
+#custom-mouse-battery.critical {
+    color: #e53935;
+    animation: blink 1s linear infinite;
+}
+
+#custom-mouse-battery.charging {
+    color: #43a047;
+}
+
+#custom-mouse-battery.disconnected {
+    opacity: 0.4;
 }
 /* <<< waybar-battery <<< */
 CSSBLOCK
+)
+
+if ! grep -qF '/* >>> waybar-battery >>> */' "$STYLE"; then
+    printf '\n%s\n' "$NEW_CSS_BLOCK" >> "$STYLE"
     echo "CSS block appended to $STYLE"
+elif grep -q '#custom-mouse-battery.charging' "$STYLE"; then
+    echo "CSS .charging rule already present in $STYLE, skipping."
 else
-    echo "CSS block already present in $STYLE, skipping."
+    BLOCK_FILE="$(mktemp)"
+    printf '%s' "$NEW_CSS_BLOCK" > "$BLOCK_FILE"
+    python3 - "$STYLE" "$BLOCK_FILE" <<'PYTHON'
+import re, sys
+style_file, block_file = sys.argv[1], sys.argv[2]
+with open(style_file) as f:
+    content = f.read()
+with open(block_file) as f:
+    new_block = f.read().rstrip("\n")
+pattern = re.compile(
+    r'/\* >>> waybar-battery >>> \*/.*?/\* <<< waybar-battery <<< \*/',
+    re.DOTALL,
+)
+content = pattern.sub(new_block, content)
+with open(style_file, 'w') as f:
+    f.write(content)
+PYTHON
+    rm -f "$BLOCK_FILE"
+    echo "Updated placeholder CSS block in $STYLE"
 fi
 
 # ---------------------------------------------------------------------------
-# 6. config.jsonc (no auto-edit — print snippet for manual paste)
+# 7. config.jsonc (no auto-edit — print snippet for manual paste)
 # ---------------------------------------------------------------------------
 CONFIG="$HOME/.config/waybar/config.jsonc"
 if [[ ! -f "$CONFIG" ]]; then
@@ -123,7 +177,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 7. Reload Waybar (or prompt for relogin)
+# 8. Reload Waybar (or prompt for relogin)
 # ---------------------------------------------------------------------------
 if [[ $NEEDS_RELOGIN -eq 1 ]]; then
     echo ""
@@ -141,12 +195,13 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 8. Summary
+# 9. Summary
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- waybar-battery install complete ---"
 echo "Done:   razer-battery.py deployed to ~/.config/waybar/scripts/"
 echo "Done:   CSS block appended to style.css (or already present)"
+echo "Done:   OpenRazer native battery notifier disabled (script owns notifications)"
 if [[ $NEEDS_RELOGIN -eq 1 ]]; then
     echo "TODO:   Re-login or reboot for the openrazer group to take effect"
 fi
